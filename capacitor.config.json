@@ -1,0 +1,8 @@
+{
+  "appId": "pl.kartynaparty.app",
+  "appName": "Karty na Party",
+  "webDir": ".",
+  "server": {
+    "androidScheme": "https"
+  }
+}

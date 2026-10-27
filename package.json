@@ -1,0 +1,24 @@
+{
+  "name": "karty-na-party-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mobilny prototyp gry imprezowej Karty na Party",
+  "scripts": {
+    "start": "node server.js",
+    "serve": "node server.js",
+    "android": "npx cap run android",
+    "ios": "npx cap run ios",
+    "sync": "npx cap sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "serve": "^14.2.4"
+  }
+}
