@@ -1,3 +1,26 @@
+function resetOnlineLobby(message) {
+  onlineRoom = null;
+  isHost = false;
+  lastResultKey = "";
+  clearSavedRoomSession();
+  hideRoomCode();
+  $("#readinessPanel").hidden = true;
+  $("#cancelRoomButton").hidden = true;
+  $("#createRoom").style.display = "";
+  $("#createRoom").textContent = "UTWÓRZ POKÓJ ↗";
+  $(".join-row").style.display = "";
+  $("#onlineName").disabled = false;
+  $("#deckSelect").disabled = false;
+  $("#beginGame").style.display = "";
+  $("#beginGame").hidden = true;
+  $("#setupPanelTitle").textContent = "GRAJ Z EKIPĄ";
+  $("#playerList").innerHTML = "";
+  $("#playerCount").textContent = "POKÓJ";
+  $("#roomCodeInput").value = "";
+  players.splice(0, players.length);
+  onlineStatus(message);
+  showScreen("setupScreen");
+}
 const $ = (q) => document.querySelector(q);
 const screens = [...document.querySelectorAll(".screen")];
 const players = [];
@@ -455,7 +478,7 @@ function ensureSocket() {
       $("#readyButton").textContent = currentPlayer?.ready
         ? "COFNIJ GOTOWOŚĆ"
         : "JESTEM GOTOWY ✓";
-      $("#readyButton").classList.toggle("is-ready", !!currentPlayer?.ready);
+      $("#readyButton").classList.toggle("is-ready", !!currentPlayer?.ready); $("#cancelRoomButton").hidden = !isHost;
       $("#beginGame").style.display = isHost ? "flex" : "none";
       $("#beginGame").disabled = !allReady;
       $("#beginGame").textContent = "ROZPOCZNIJ GRĘ ↗";
@@ -479,7 +502,7 @@ function ensureSocket() {
     showScreen("setupScreen");
     onlineStatus(message + " Możesz dołączyć ponownie kodem pokoju.");
   });
-  socket.on("room:notice", (m) => notify(m));
+  socket.on("room:notice", (m) => notify(m)); socket.on("room:cancelled", () => { resetOnlineLobby("Pokój został anulowany. Możesz utworzyć nowy albo dołączyć do innego."); notify("Host anulował pokój."); });
   socket.on("disconnect", () =>
     onlineStatus("Utracono połączenie. Łączenie ponownie…"),
   );
@@ -752,7 +775,7 @@ $("#joinRoom").onclick = () => {
       code: $("#roomCodeInput").value.trim(),
     });
 };
-$("#readyButton").onclick = () => {
+$("#cancelRoomButton").onclick = () => { if (isHost && onlineRoom?.phase === "lobby") socket?.emit("room:cancel"); }; $("#readyButton").onclick = () => {
   const currentPlayer = onlineRoom?.players.find(
     (player) => player.id === myPlayerId,
   );
