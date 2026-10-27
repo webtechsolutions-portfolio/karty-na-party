@@ -236,7 +236,7 @@ function registerRoomHandlers(io) {
       room.phase = "playing";
       broadcast(room);
     });
-    socket.on("room:leave", () => leave(socket));
+    socket.on("room:cancel", () => { const room = rooms.get(socket.data.room); if (!room || room.hostId !== socket.id || room.phase !== "lobby") return; rooms.delete(room.code); for (const player of room.players) { if (player.expiryTimer) clearTimeout(player.expiryTimer); const memberSocket = io.sockets.sockets.get(player.id); if (!memberSocket) continue; memberSocket.data.room = null; memberSocket.emit("room:cancelled"); memberSocket.leave(room.code); } }); socket.on("room:leave", () => leave(socket));
     socket.on("disconnect", () => suspend(socket));
   });
   function suspend(socket) {
