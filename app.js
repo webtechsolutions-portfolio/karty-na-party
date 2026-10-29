@@ -6,6 +6,7 @@ function resetOnlineLobby(message) {
   hideRoomCode();
   $("#readinessPanel").hidden = true;
   $("#cancelRoomButton").hidden = true;
+  $("#endGameButton").hidden = true;
   $("#createRoom").style.display = "";
   $("#createRoom").textContent = "UTWÓRZ POKÓJ ↗";
   $(".join-row").style.display = "";
@@ -384,6 +385,15 @@ $("#quitGame").onclick = () => {
     showScreen("homeScreen");
   }
 };
+$("#endGameButton").onclick = () => {
+  if (!isHost || !onlineRoom || onlineRoom.phase === "lobby" || !socket) return;
+  if (
+    confirm(
+      "Zakończyć grę wszystkim? Pokój i możliwość powrotu zostaną trwale usunięte.",
+    )
+  )
+    socket.emit("game:end");
+};
 $("#rulesButton").onclick = () => $("#rulesModal").classList.add("open");
 $("#closeRules").onclick = $("#okRules").onclick = () =>
   $("#rulesModal").classList.remove("open");
@@ -435,6 +445,7 @@ function ensureSocket() {
     $("#adultConsentRow").hidden = !CARD_PACKS[selectedDeckId].adult;
     showRoomCode(r.code);
     isHost = r.hostId === myPlayerId;
+    $("#endGameButton").hidden = r.phase === "lobby" || !isHost;
     if (
       CARD_PACKS[selectedDeckId].adult &&
       !isHost &&
@@ -502,7 +513,15 @@ function ensureSocket() {
     showScreen("setupScreen");
     onlineStatus(message + " Możesz dołączyć ponownie kodem pokoju.");
   });
-  socket.on("room:notice", (m) => notify(m)); socket.on("room:cancelled", () => { resetOnlineLobby("Pokój został anulowany. Możesz utworzyć nowy albo dołączyć do innego."); notify("Host anulował pokój."); });
+  socket.on("room:notice", (m) => notify(m));
+  socket.on("room:cancelled", () => {
+    resetOnlineLobby("Pokój został anulowany. Możesz utworzyć nowy albo dołączyć do innego.");
+    notify("Host anulował pokój.");
+  });
+  socket.on("room:ended", () => {
+    resetOnlineLobby("Host zakończył grę. Pokój został usunięty i nie można do niego wrócić.");
+    notify("Host zakończył rozgrywkę.");
+  });
   socket.on("disconnect", () =>
     onlineStatus("Utracono połączenie. Łączenie ponownie…"),
   );

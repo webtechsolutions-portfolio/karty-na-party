@@ -17,6 +17,11 @@
 .round-rule-banner{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:4px 10px;margin:12px auto 0;padding:10px 14px;max-width:460px;border:1px solid #ff54b980;background:linear-gradient(110deg,#301341e8,#112344e8);box-shadow:0 0 20px #ff3cac24,inset 0 0 18px #00f5ff0b}.round-rule-banner[hidden]{display:none}.round-rule-banner>span{grid-row:span 2;color:#00f5ff;font-size:7px;font-weight:800;letter-spacing:.12em;writing-mode:vertical-rl;transform:rotate(180deg)}.round-rule-banner>b{color:#fff;font:700 12px var(--display);letter-spacing:.06em;text-shadow:0 0 10px #ff3cac77}.round-rule-banner>small{color:#cbc5e7;font-size:9px;line-height:1.4}.scoreboard-top>span:first-child{color:#00f5ff}
 .round-rule-banner[hidden]{display:none}
 
+.host-end-game{border:1px solid #ff54b9;background:#311433;color:#ffb6e0;padding:8px 10px;font-size:8px;font-weight:800;letter-spacing:.08em;white-space:nowrap;box-shadow:0 0 12px #ff3cac24}
+.host-end-game:hover{background:#ff3cac;color:#fff;box-shadow:0 0 16px #ff3cac66}
+.host-end-game[hidden]{display:none}
+@media(max-width:700px){.host-end-game{padding:7px 6px;font-size:7px;letter-spacing:.04em}}
+
 .card-question{min-width:0;min-height:0;gap:10px;overflow:hidden}
 .question-text{flex:1;min-width:0;min-height:0;overflow:auto;overflow-wrap:anywhere;word-break:normal;hyphens:auto;scrollbar-width:thin;scrollbar-color:#00f5ff88 transparent}
 
