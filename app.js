@@ -305,8 +305,8 @@ function finishTurn(success) {
         : rule?.safe
           ? "Bezpieczna runda!"
         : sober
-          ? "Czas na wodę!"
-          : "Shot na koncie!";
+          ? "Tym razem woda!"
+          : "Pijesz shota!";
   $("#resultDescription").textContent =
     success === true
       ? rule?.crewPoints
@@ -318,17 +318,26 @@ function finishTurn(success) {
           ? `${player.name}, to bezpieczna runda — shot nie został doliczony.`
         : sober
           ? `${player.name}, wybierz wodę lub sok. Licznik shotów pozostaje bez zmian.`
-          : `${player.name}, shot doliczony. Masz już ${player.shots}.`;
+          : `${player.name}, tej odpowiedzi ekipa nie zalicza. Czas na łyk — masz już ${player.shots}.`;
   const actions = $("#resultActions");
   actions.innerHTML =
     '<button class="primary-button full" id="nextTurn">DALEJ, NASTĘPNA OSOBA <span>↗</span></button>';
   $("#resultModal").classList.add("open");
   $("#nextTurn").onclick = () => {
     $("#resultModal").classList.remove("open");
+    $("#shotAnimation").classList.remove("is-active");
     turn++;
     updateGame();
   };
   if (success === true) burst();
+  else if (success === false && !sober && !rule?.safe) showShotAnimation(player.name);
+}
+function showShotAnimation(playerName) {
+  const animation = $("#shotAnimation");
+  $(".shot-caption").textContent = `KOLEJKA DLA ${playerName.toLocaleUpperCase()}`;
+  animation.classList.remove("is-active");
+  void animation.offsetWidth;
+  animation.classList.add("is-active");
 }
 function burst() {
   const b = $(".result-burst");
@@ -749,6 +758,7 @@ function renderOnlineGame() {
         $("#resultDescription").textContent = `${entries.join(" · ")}. ${x.tied ? "Remis — nikt nie pije." : x.sober ? `${x.loser} przegrywa, ale w trybie bezalkoholowym zamiast shota wybiera wodę lub sok.` : `${x.loser} przegrywa i dostaje jednego shota.`}`;
         $("#resultActions").innerHTML = isHost ? '<button class="primary-button full" id="onlineNext">NASTĘPNA TURA <span>↗</span></button>' : '<div class="vote-wait">HOST PRZECHODZI DO NASTĘPNEJ TURY</div>';
         $("#resultModal").classList.add("open");
+        if (x.loser && !x.sober) showShotAnimation(x.loser);
         const n = $("#onlineNext"); if (n) n.onclick = () => socket.emit("game:next");
       } else if (!$("#resultModal").classList.contains("open")) $("#resultModal").classList.add("open");
       return;
@@ -772,8 +782,8 @@ function renderOnlineGame() {
           : x.safeRound
             ? "Bezpieczna runda!"
           : r.sober
-            ? "Czas na wodę!"
-            : "Shot na koncie!";
+            ? "Tym razem woda!"
+            : "Pijesz shota!";
       $("#resultDescription").textContent = x.skipped
         ? `${x.player} pomija tę kartę. Nie ma kary ani głosowania.`
         : x.passed
@@ -784,7 +794,7 @@ function renderOnlineGame() {
             ? `${x.player}, bezpieczna runda — shot nie został doliczony.`
           : r.sober
             ? `${x.player}, większość nie zaliczyła zadania. Wybierz wodę lub sok.`
-            : `${x.player}, większość nie zaliczyła zadania. Shot doliczony.`;
+            : `${x.player}, ekipa nie zaliczyła odpowiedzi. Czas na łyk.`;
       $("#resultActions").innerHTML = isHost
         ? '<button class="primary-button full" id="onlineNext">NASTĘPNA TURA <span>↗</span></button>'
         : '<div class="vote-wait">HOST PRZECHODZI DO NASTĘPNEJ TURY</div>';
@@ -792,10 +802,12 @@ function renderOnlineGame() {
       const n = $("#onlineNext");
       if (n) n.onclick = () => socket.emit("game:next");
       if (x.passed && !x.skipped) burst();
+      else if (!x.skipped && !x.safeRound && !r.sober) showShotAnimation(x.player);
     } else if (!$("#resultModal").classList.contains("open"))
       $("#resultModal").classList.add("open");
   } else {
     $("#resultModal").classList.remove("open");
+    $("#shotAnimation").classList.remove("is-active");
     lastResultKey = "";
   }
 }
