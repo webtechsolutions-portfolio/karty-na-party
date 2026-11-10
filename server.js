@@ -18,6 +18,12 @@ app.get("/never-cards.js", (_, res) => res.sendFile(path.join(__dirname, "never-
 app.get("/app.js", (_, res) => res.sendFile(path.join(__dirname, "app.js")));
 app.get("/client/custom-deck.js", (_, res) => res.sendFile(path.join(__dirname, "client", "custom-deck.js")));
 app.get("/style.css", (_, res) => res.sendFile(path.join(__dirname, "style.css")));
+app.get("/pwa.css", (_, res) => res.sendFile(path.join(__dirname, "pwa.css")));
+app.get("/manifest.webmanifest", (_, res) => res.sendFile(path.join(__dirname, "manifest.webmanifest")));
+app.get("/icon.svg", (_, res) => res.sendFile(path.join(__dirname, "icon.svg")));
+app.get("/icon-192.png", (_, res) => res.sendFile(path.join(__dirname, "icon-192.png")));
+app.get("/icon-512.png", (_, res) => res.sendFile(path.join(__dirname, "icon-512.png")));
+app.get("/apple-touch-icon.png", (_, res) => res.sendFile(path.join(__dirname, "apple-touch-icon.png")));
 app.get("/health", (_, res) => res.json({ status: "ok" }));
 
 registerRoomHandlers(io);

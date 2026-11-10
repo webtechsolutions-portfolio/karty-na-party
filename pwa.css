@@ -1,0 +1,8 @@
+/* Keep installed PWA content clear of notches and home indicators. */
+.app-shell {
+  min-height: 100svh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: calc(7.2% + env(safe-area-inset-left));
+  padding-right: calc(7.2% + env(safe-area-inset-right));
+}
