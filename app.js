@@ -335,6 +335,24 @@ function burst() {
   b.style.animation = "none";
   void b.offsetWidth;
   b.style.animation = "";
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const layer = document.createElement("div");
+  layer.className = "confetti-layer";
+  layer.setAttribute("aria-hidden", "true");
+  const colors = ["#e76f51", "#f4c95d", "#83a88f", "#d5a3a8", "#f3ead8"];
+  for (let index = 0; index < 34; index++) {
+    const piece = document.createElement("i");
+    piece.className = `confetti-piece confetti-piece-${index % 3}`;
+    piece.style.left = `${Math.random() * 100}%`;
+    piece.style.backgroundColor = colors[index % colors.length];
+    piece.style.setProperty("--drift-x", `${Math.round((Math.random() - 0.5) * 220)}px`);
+    piece.style.setProperty("--fall-rotate", `${Math.round(Math.random() * 900 - 450)}deg`);
+    piece.style.setProperty("--fall-time", `${900 + Math.random() * 700}ms`);
+    piece.style.setProperty("--fall-delay", `${Math.random() * 180}ms`);
+    layer.append(piece);
+  }
+  document.body.append(layer);
+  window.setTimeout(() => layer.remove(), 1900);
 }
 function notify(msg) {
   const t = $("#toast");
@@ -773,6 +791,7 @@ function renderOnlineGame() {
       $("#resultModal").classList.add("open");
       const n = $("#onlineNext");
       if (n) n.onclick = () => socket.emit("game:next");
+      if (x.passed && !x.skipped) burst();
     } else if (!$("#resultModal").classList.contains("open"))
       $("#resultModal").classList.add("open");
   } else {
