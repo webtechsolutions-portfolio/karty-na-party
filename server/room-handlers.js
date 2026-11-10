@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const CARD_PACKS = require("../card-packs.js");
 const RoundRules = require("../round-rules.js");
+const QUIZ_QUESTIONS = require("../quiz-questions.js");
 
 function registerRoomHandlers(io) {
   const rooms = new Map();
@@ -27,6 +28,14 @@ function registerRoomHandlers(io) {
       deckSize: room.deck.length,
       deckId: room.deckId,
       lastResult: room.lastResult,
+      challenge: room.challenge && {
+        challengerId: room.challenge.challengerId,
+        opponentId: room.challenge.opponentId,
+        questionIndex: room.challenge.questionIndex,
+        question: room.challenge.questions[room.challenge.questionIndex]?.q || null,
+        options: room.challenge.questions[room.challenge.questionIndex]?.a || null,
+        answered: Object.keys(room.challenge.answers),
+      },
     };
   }
   function broadcast(room) {
@@ -105,6 +114,7 @@ function registerRoomHandlers(io) {
         deckId: Object.hasOwn(CARD_PACKS, deckId) ? deckId : "classic",
         deck: [...pack.cards].sort(() => Math.random() - 0.5),
         lastResult: null,
+        challenge: null,
       };
       room.hostToken = room.players[0].token;
       rooms.set(code, room);
@@ -189,6 +199,7 @@ function registerRoomHandlers(io) {
       room.turn = 0;
       room.card = null;
       room.cardIndex = 0;
+      room.challenge = null;
       room.players.forEach((p) => { p.shots = 0; p.points = 0; });
       broadcast(room);
     });
@@ -201,10 +212,55 @@ function registerRoomHandlers(io) {
         room.deck = [...CARD_PACKS[room.deckId].cards].sort(() => Math.random() - 0.5);
         room.cardIndex = 0;
       }
-      room.card = room.deck[room.cardIndex];
-      room.phase = "voting";
+      if (Math.random() < 0.2 && room.players.length > 1) {
+        room.card = ["WYZWANIE", "★", "Rzuć wyzwanie jednej osobie z ekipy! Oboje zmierzycie się w quizie."];
+        room.phase = "challenge-pick";
+        room.challenge = { challengerId: socket.id, opponentId: null, questions: [...QUIZ_QUESTIONS].sort(() => Math.random() - 0.5).slice(0, 5), questionIndex: 0, answers: {}, scores: {} };
+      } else {
+        room.card = room.deck[room.cardIndex];
+        room.phase = "voting";
+        room.challenge = null;
+      }
       room.votes = {};
       room.lastResult = null;
+      broadcast(room);
+    });
+    socket.on("challenge:select", (opponentId) => {
+      const room = rooms.get(socket.data.room);
+      if (!room || room.phase !== "challenge-pick" || room.challenge?.challengerId !== socket.id) return;
+      const opponent = room.players.find((p) => p.id === opponentId && p.id !== socket.id && p.connected);
+      if (!opponent) return roomError(socket, "Wybierz inną osobę, która jest w pokoju.");
+      room.challenge.opponentId = opponent.id;
+      room.phase = "challenge-quiz";
+      broadcast(room);
+    });
+    socket.on("challenge:answer", (answer) => {
+      const room = rooms.get(socket.data.room), c = room?.challenge;
+      if (!room || room.phase !== "challenge-quiz" || !c || ![c.challengerId, c.opponentId].includes(socket.id)) return;
+      if (!Number.isInteger(answer) || answer < 0 || answer > 3 || Object.hasOwn(c.answers, socket.id)) return;
+      const question = c.questions[c.questionIndex];
+      c.answers[socket.id] = answer === question.correct;
+      if ([c.challengerId, c.opponentId].every((id) => Object.hasOwn(c.answers, id))) {
+        c.scores[c.challengerId] = (c.scores[c.challengerId] || 0) + Number(c.answers[c.challengerId]);
+        c.scores[c.opponentId] = (c.scores[c.opponentId] || 0) + Number(c.answers[c.opponentId]);
+        if (c.questionIndex < 4) { c.questionIndex++; c.answers = {}; }
+        else {
+          const challenger = room.players.find((p) => p.id === c.challengerId), opponent = room.players.find((p) => p.id === c.opponentId);
+          const scores = { [c.challengerId]: c.scores[c.challengerId], [c.opponentId]: c.scores[c.opponentId] };
+          const loserId = scores[c.challengerId] === scores[c.opponentId] ? null : scores[c.challengerId] < scores[c.opponentId] ? c.challengerId : c.opponentId;
+          const loser = loserId && room.players.find((p) => p.id === loserId);
+          if (loser && !room.sober) loser.shots++;
+          room.lastResult = { challenge: true, players: [challenger.name, opponent.name], scores, loserId, loser: loser?.name || null, tied: !loserId, sober: room.sober };
+          room.phase = "result";
+        }
+      }
+      broadcast(room);
+    });
+    socket.on("challenge:pass", () => {
+      const room = rooms.get(socket.data.room);
+      if (!room || room.phase !== "challenge-pick" || room.challenge?.challengerId !== socket.id) return;
+      room.lastResult = { passed: true, skipped: true, yes: 0, no: 0, player: room.players[room.turn % room.players.length].name };
+      room.phase = "result";
       broadcast(room);
     });
     socket.on("game:vote", (vote) => {
@@ -232,6 +288,7 @@ function registerRoomHandlers(io) {
       room.turn++;
       room.cardIndex++;
       room.card = null;
+      room.challenge = null;
       room.votes = {};
       room.phase = "playing";
       broadcast(room);
@@ -297,6 +354,7 @@ function registerRoomHandlers(io) {
   function removePlayer(room, player, expired) {
     if (player.expiryTimer) clearTimeout(player.expiryTimer);
     const wasActive = room.players[room.turn % room.players.length]?.token === player.token;
+    const wasChallengePlayer = room.challenge && [room.challenge.challengerId, room.challenge.opponentId].includes(player.id);
     const leavingIndex = room.players.indexOf(player);
     const activeIndex = room.turn % room.players.length;
     room.players = room.players.filter((candidate) => candidate !== player);
@@ -314,7 +372,13 @@ function registerRoomHandlers(io) {
       const replacement = room.players.find((candidate) => candidate.connected) || room.players[0];
       room.hostId = replacement.id;
     }
-    if (wasActive && room.phase === "voting") {
+    if (wasChallengePlayer && ["challenge-pick", "challenge-quiz"].includes(room.phase)) {
+      room.phase = "playing";
+      room.card = null;
+      room.challenge = null;
+      room.lastResult = null;
+      io.to(room.code).emit("room:notice", "Uczestnik wyzwania opuścił pokój. Wyzwanie zostało pominięte.");
+    } else if (wasActive && room.phase === "voting") {
       room.phase = "playing";
       room.card = null;
       room.votes = {};

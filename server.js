@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 3000;
 app.get("/", (_, res) => res.sendFile(path.join(__dirname, "index.html")));
 app.get("/card-packs.js", (_, res) => res.sendFile(path.join(__dirname, "card-packs.js")));
 app.get("/round-rules.js", (_, res) => res.sendFile(path.join(__dirname, "round-rules.js")));
+app.get("/quiz-questions.js", (_, res) => res.sendFile(path.join(__dirname, "quiz-questions.js")));
 app.get("/app.js", (_, res) => res.sendFile(path.join(__dirname, "app.js")));
 app.get("/client/custom-deck.js", (_, res) => res.sendFile(path.join(__dirname, "client", "custom-deck.js")));
 app.get("/style.css", (_, res) => res.sendFile(path.join(__dirname, "style.css")));

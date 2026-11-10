@@ -660,6 +660,29 @@ function renderOnlineGame() {
   }
   const amActive = active.id === myPlayerId;
   $("#decisionArea").innerHTML = "";
+  if (r.phase === "challenge-pick" && r.challenge) {
+    $("#tableHint").textContent = amActive ? "WYBIERZ OSOBĘ DO POJEDYNKU" : `${active.name} wybiera przeciwnika`;
+    if (amActive) {
+      const options = r.players.filter((p) => p.id !== myPlayerId).map((p) => `<button class="success-btn challenge-player" data-player="${p.id}">${escapeHtml(p.name)}</button>`).join("");
+      $("#decisionArea").innerHTML = `<div class="challenge-panel"><b>RZUĆ WYZWANIE</b><p>Wybierz osobę. Oboje odpowiecie na 5 pytań.</p><div class="challenge-player-list">${options}</div><button class="skip-btn full-skip" id="passChallenge">POMIŃ WYZWANIE</button></div>`;
+      document.querySelectorAll(".challenge-player").forEach((b) => b.onclick = () => socket.emit("challenge:select", b.dataset.player));
+      $("#passChallenge").onclick = () => socket.emit("challenge:pass");
+    }
+  }
+  if (r.phase === "challenge-quiz" && r.challenge) {
+    const c = r.challenge, participants = [c.challengerId, c.opponentId], isParticipant = participants.includes(myPlayerId);
+    const partner = r.players.find((p) => p.id === (myPlayerId === c.challengerId ? c.opponentId : c.challengerId));
+    $("#tableHint").textContent = isParticipant ? `POJEDYNEK Z ${partner?.name || "GRACZEM"} · PYTANIE ${c.questionIndex + 1}/5` : `POJEDYNEK · PYTANIE ${c.questionIndex + 1}/5`;
+    $("#questionType").textContent = "QUIZ · POJEDYNEK";
+    $("#questionSuit").textContent = "★";
+    $("#questionText").textContent = c.question;
+    card.classList.add("flipped"); flipped = true;
+    if (isParticipant && !c.answered.includes(myPlayerId)) {
+      $("#decisionArea").innerHTML = `<div class="quiz-options">${c.options.map((answer, i) => `<button class="quiz-option" data-answer="${i}"><b>${String.fromCharCode(65 + i)}</b> ${escapeHtml(answer)}</button>`).join("")}</div>`;
+      document.querySelectorAll(".quiz-option").forEach((b) => b.onclick = () => socket.emit("challenge:answer", Number(b.dataset.answer)));
+    } else if (isParticipant) $("#decisionArea").innerHTML = '<div class="vote-wait">ODPOWIEDŹ ZAPISANA · CZEKAMY NA DRUGIEGO GRACZA</div>';
+    else $("#decisionArea").innerHTML = '<div class="vote-wait">GRACZE ODPOWIADAJĄ NA SWOICH TELEFONACH</div>';
+  }
   if (r.phase === "playing") {
     $("#tableHint").textContent = amActive
       ? "TWOJA KOLEJ · ODKRYJ KARTĘ"
@@ -697,6 +720,21 @@ function renderOnlineGame() {
     if (no) no.onclick = () => socket.emit("game:vote", "no");
   }
   if (r.phase === "result") {
+    if (r.lastResult?.challenge) {
+      const x = r.lastResult, key = `${r.code}:challenge:${r.cardIndex}`;
+      $("#tableHint").textContent = "WYNIK POJEDYNKU";
+      if (key !== lastResultKey) {
+        lastResultKey = key;
+        const entries = x.players.map((name, i) => { const id = [r.challenge?.challengerId, r.challenge?.opponentId][i]; return `${name}: ${x.scores[id]}/5 poprawnych`; });
+        $("#resultEyebrow").textContent = "POJEDYNEK QUIZOWY · 5 PYTAŃ";
+        $("#resultTitle").textContent = "Wyniki wyzwania";
+        $("#resultDescription").textContent = `${entries.join(" · ")}. ${x.tied ? "Remis — nikt nie pije." : x.sober ? `${x.loser} przegrywa, ale w trybie bezalkoholowym zamiast shota wybiera wodę lub sok.` : `${x.loser} przegrywa i dostaje jednego shota.`}`;
+        $("#resultActions").innerHTML = isHost ? '<button class="primary-button full" id="onlineNext">NASTĘPNA TURA <span>↗</span></button>' : '<div class="vote-wait">HOST PRZECHODZI DO NASTĘPNEJ TURY</div>';
+        $("#resultModal").classList.add("open");
+        const n = $("#onlineNext"); if (n) n.onclick = () => socket.emit("game:next");
+      } else if (!$("#resultModal").classList.contains("open")) $("#resultModal").classList.add("open");
+      return;
+    }
     const key = `${r.code}:${r.cardIndex}:${r.lastResult?.passed}:${r.lastResult?.skipped}`;
     $("#tableHint").textContent = "WERDYKT EKIPY";
     if (key !== lastResultKey) {
