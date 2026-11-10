@@ -2,10 +2,32 @@ const crypto = require("crypto");
 const CARD_PACKS = require("../card-packs.js");
 const RoundRules = require("../round-rules.js");
 const QUIZ_QUESTIONS = require("../quiz-questions.js");
+const GAME_MOODS = require("../game-moods.js");
+const NEVER_CARDS = require("../never-cards.js");
 
 function registerRoomHandlers(io) {
   const rooms = new Map();
   const RECONNECT_GRACE_MS = 10 * 60 * 1000;
+
+  function shuffled(items) {
+    return [...items].sort(() => Math.random() - 0.5);
+  }
+  function gameDeck(deckId, moodId) {
+    const pack = CARD_PACKS[deckId] || CARD_PACKS.classic;
+    const mood = GAME_MOODS[moodId] || GAME_MOODS.party;
+    const neverCards = shuffled(NEVER_CARDS).slice(0, mood.neverCards);
+    return shuffled([...pack.cards, ...neverCards]);
+  }
+  function finishNeverRound(room) {
+    if (!room || room.phase !== "never") return;
+    const eligible = room.players.filter((player) => player.connected);
+    if (!eligible.length || !eligible.every((player) => Object.hasOwn(room.neverAnswers, player.id))) return;
+    const yes = eligible.filter((player) => room.neverAnswers[player.id]).length;
+    const no = eligible.length - yes;
+    if (!room.sober) eligible.filter((player) => room.neverAnswers[player.id]).forEach((player) => player.shots++);
+    room.lastResult = { never: true, yes, no, sober: room.sober };
+    room.phase = "result";
+  }
 
   function publicRoom(room) {
     return {
@@ -27,6 +49,8 @@ function registerRoomHandlers(io) {
       sober: room.sober,
       deckSize: room.deck.length,
       deckId: room.deckId,
+      gameMoodId: room.gameMoodId,
+      neverAnswered: Object.keys(room.neverAnswers || {}),
       lastResult: room.lastResult,
       challenge: room.challenge && {
         challengerId: room.challenge.challengerId,
@@ -91,13 +115,14 @@ function registerRoomHandlers(io) {
   }
 
   io.on("connection", (socket) => {
-    socket.on("room:create", ({ name, sober, deckId, adultConsent }) => {
+    socket.on("room:create", ({ name, sober, deckId, adultConsent, gameMoodId }) => {
       if (socket.data.room) return roomError(socket, "Jesteś już w pokoju.");
       const safeName = String(name || "")
         .trim()
         .slice(0, 18);
       if (!safeName) return roomError(socket, "Wpisz swoje imię.");
       const pack = CARD_PACKS[deckId] || CARD_PACKS.classic;
+      const mood = Object.hasOwn(GAME_MOODS, gameMoodId) ? gameMoodId : "party";
       if (pack.adult && adultConsent !== true) return roomError(socket, "Host musi potwierdzić 18+ i zgodę na talię.");
       const code = makeCode();
       const room = {
@@ -112,9 +137,11 @@ function registerRoomHandlers(io) {
         votes: {},
         sober: !!sober,
         deckId: Object.hasOwn(CARD_PACKS, deckId) ? deckId : "classic",
-        deck: [...pack.cards].sort(() => Math.random() - 0.5),
+        deck: gameDeck(deckId, mood),
         lastResult: null,
         challenge: null,
+        gameMoodId: mood,
+        neverAnswers: {},
       };
       room.hostToken = room.players[0].token;
       rooms.set(code, room);
@@ -200,6 +227,7 @@ function registerRoomHandlers(io) {
       room.card = null;
       room.cardIndex = 0;
       room.challenge = null;
+      room.neverAnswers = {};
       room.players.forEach((p) => { p.shots = 0; p.points = 0; });
       broadcast(room);
     });
@@ -209,20 +237,32 @@ function registerRoomHandlers(io) {
       if (room.players[room.turn % room.players.length].id !== socket.id)
         return roomError(socket, "Teraz kolej innego gracza.");
       if (room.cardIndex >= room.deck.length) {
-        room.deck = [...CARD_PACKS[room.deckId].cards].sort(() => Math.random() - 0.5);
+        room.deck = gameDeck(room.deckId, room.gameMoodId);
         room.cardIndex = 0;
       }
-      if (Math.random() < 0.2 && room.players.length > 1) {
+      const mood = GAME_MOODS[room.gameMoodId] || GAME_MOODS.party;
+      const nextCardIsNever = room.deck[room.cardIndex]?.[0] === "NIGDY PRZENIGDY";
+      if (!nextCardIsNever && Math.random() < mood.challengeRate && room.players.length > 1) {
         room.card = ["WYZWANIE", "★", "Rzuć wyzwanie jednej osobie z ekipy! Oboje zmierzycie się w quizie."];
         room.phase = "challenge-pick";
         room.challenge = { challengerId: socket.id, opponentId: null, questions: [...QUIZ_QUESTIONS].sort(() => Math.random() - 0.5).slice(0, 5), questionIndex: 0, answers: {}, scores: {} };
       } else {
         room.card = room.deck[room.cardIndex];
-        room.phase = "voting";
+        room.phase = room.card[0] === "NIGDY PRZENIGDY" ? "never" : "voting";
         room.challenge = null;
+        room.neverAnswers = {};
       }
       room.votes = {};
       room.lastResult = null;
+      broadcast(room);
+    });
+    socket.on("never:answer", (answer) => {
+      const room = rooms.get(socket.data.room);
+      if (!room || room.phase !== "never" || typeof answer !== "boolean") return;
+      const player = getPlayer(room, socket);
+      if (!player?.connected || Object.hasOwn(room.neverAnswers, player.id)) return;
+      room.neverAnswers[player.id] = answer;
+      finishNeverRound(room);
       broadcast(room);
     });
     socket.on("challenge:select", (opponentId) => {
@@ -289,6 +329,7 @@ function registerRoomHandlers(io) {
       room.cardIndex++;
       room.card = null;
       room.challenge = null;
+      room.neverAnswers = {};
       room.votes = {};
       room.phase = "playing";
       broadcast(room);
@@ -341,6 +382,7 @@ function registerRoomHandlers(io) {
       if (replacement) room.hostId = replacement.id;
     }
     if (room.phase === "voting") finishVoting(room);
+    if (room.phase === "never") finishNeverRound(room);
     broadcast(room);
   }
   function leave(socket) {
@@ -385,6 +427,7 @@ function registerRoomHandlers(io) {
       room.lastResult = null;
       io.to(room.code).emit("room:notice", "Aktywny gracz opuścił pokój. Tura została pominięta.");
     } else if (room.phase === "voting") finishVoting(room);
+    if (room.phase === "never") finishNeverRound(room);
     if (expired) io.to(room.code).emit("room:notice", `${player.name} nie wrócił(a) w ciągu 10 minut i opuścił(a) pokój.`);
     broadcast(room);
   }

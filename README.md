@@ -42,6 +42,8 @@ W projektach natywnych skonfiguruj identyfikatory, ikony, splash screen i podpis
 - lokalną rozgrywkę na jednym przekazywanym telefonie;
 - tryb online dla 2–12 telefonów: kod pokoju i link zaproszeniowy, zgłaszanie gotowości przed startem, host, wspólna karta i tura, głosowanie pozostałych uczestników, werdykt większości oraz automatyczny powrót do pokoju po odświeżeniu lub utracie połączenia (miejsce jest rezerwowane przez 10 minut);
 - trzy talie: Klasyczną, Pikantną 18+ i Erotyczną 18+; talie dla dorosłych wymagają potwierdzenia wieku i zgody, a w online każdy dołączający potwierdza je przed zgłoszeniem gotowości;
+- trzy klimaty gry: Na luzie, Imprezowo i Rywalizacja — ustawiają częstotliwość specjalnych tur;
+- losowe karty „Nigdy przenigdy” z odpowiedzią każdego gracza na jego telefonie w online lub po kolei na wspólnym urządzeniu lokalnym;
 - punkty za zaliczone karty oraz specjalna zasada co piątą kartę: podwójne punkty, punkty dla całej ekipy lub bezpieczna runda;
 - możliwość pominięcia dowolnej karty bez kary, także w trybie online;
 - animowany flip 3D karty, informacje o turze i postępie talii;
@@ -59,6 +61,7 @@ W projektach natywnych skonfiguruj identyfikatory, ikony, splash screen i podpis
 - `client/custom-deck.js` odpowiada za tworzenie, zapis, import i eksport własnych kart.
 - `card-packs.js` jest wspólnym katalogiem talii dla klienta i serwera.
 - `round-rules.js` definiuje wspólne modyfikatory rund dla gry lokalnej i online.
+- `game-moods.js` opisuje klimaty gry, a `never-cards.js` przechowuje treści specjalnej tury „Nigdy przenigdy”.
 - `index.html` zawiera strukturę ekranów, a `style.css` ich wygląd.
 
 ## Kierunki rozwoju

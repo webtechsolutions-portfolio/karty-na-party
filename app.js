@@ -12,6 +12,7 @@ function resetOnlineLobby(message) {
   $(".join-row").style.display = "";
   $("#onlineName").disabled = false;
   $("#deckSelect").disabled = false;
+  $("#gameMoodSelect").disabled = false;
   $("#beginGame").style.display = "";
   $("#beginGame").hidden = true;
   $("#setupPanelTitle").textContent = "GRAJ Z EKIPĄ";
@@ -26,6 +27,8 @@ const $ = (q) => document.querySelector(q);
 const screens = [...document.querySelectorAll(".screen")];
 const players = [];
 const CARD_PACKS = window.CARD_PACKS;
+const GAME_MOODS = window.GAME_MOODS;
+const NEVER_CARDS = window.NEVER_CARDS;
 let selectedDeckId = "classic";
 const cards = CARD_PACKS.classic.cards;
 const roomSessionStorageKey = "karty-na-party.room-session.v1";
@@ -48,6 +51,7 @@ let turn = 0,
   sound = true,
   waiting = false;
 let selectedMode = "local",
+  selectedMoodId = "party",
   socket = null,
   onlineRoom = null,
   myPlayerId = null,
@@ -104,12 +108,19 @@ function updateDeckInfo() {
   $("#deckDescription").textContent = pack.description;
   const title = $("#deckTitle");
   if (title) title.textContent = `TALIA ${pack.name.toLocaleUpperCase()}`;
-  const count =
-    pack.cards.length + (selectedMode === "local" ? customCards.length : 0);
+  const count = pack.cards.length + GAME_MOODS[selectedMoodId].neverCards +
+    (selectedMode === "local" ? customCards.length : 0);
   const deckSize = $("#deckSize");
   if (deckSize) deckSize.textContent = String(count);
   const subtitle = $("#deckSubtitle");
   if (subtitle) subtitle.textContent = `${count} pytań i wyzwań`;
+}
+function updateGameMood() {
+  selectedMoodId = GAME_MOODS[$("#gameMoodSelect").value]
+    ? $("#gameMoodSelect").value
+    : "party";
+  $("#gameMoodDescription").textContent = GAME_MOODS[selectedMoodId].description;
+  updateDeckInfo();
 }
 function addPlayer() {
   const input = $("#playerName"),
@@ -173,14 +184,7 @@ $("#playerName").addEventListener("keydown", (e) => {
 function startGame() {
   if (players.length < 2) return;
   if (!validateDeckConsent()) return;
-  deck = shuffleCards([
-    ...CARD_PACKS[selectedDeckId].cards,
-    ...customCards.map((card) => [
-      card.type,
-      card.type === "PYTANIE" ? "♥" : "♣",
-      card.text,
-    ]),
-  ]);
+  deck = buildLocalDeck();
   cardIndex = 0;
   turn = 0;
   players.forEach((p) => { p.shots = 0; p.points = 0; });
@@ -221,6 +225,7 @@ function updateGame() {
   waiting = false;
   flipped = false;
   $("#playingCard").classList.remove("flipped");
+  $("#playingCard").classList.remove("never-card");
 }
 function resetCard() {
   updateGame();
@@ -236,24 +241,22 @@ function renderRoundRuleBanner(index) {
 function drawCard() {
   if (waiting) return;
   if (cardIndex >= deck.length) {
-    deck = shuffleCards([
-      ...CARD_PACKS[selectedDeckId].cards,
-      ...customCards.map((card) => [
-        card.type,
-        card.type === "PYTANIE" ? "♥" : "♣",
-        card.text,
-      ]),
-    ]);
+    deck = buildLocalDeck();
     cardIndex = 0;
     notify("Nowa talia przetasowana!");
   }
   const [type, suit, text] = deck[cardIndex];
+  $("#playingCard").classList.toggle("never-card", type === "NIGDY PRZENIGDY");
   $("#questionType").textContent = type;
   $("#questionSuit").textContent = suit;
   $("#questionText").textContent = text;
   $("#playingCard").classList.add("flipped");
   flipped = true;
   waiting = true;
+  if (type === "NIGDY PRZENIGDY") {
+    beginLocalNeverRound(text);
+    return;
+  }
   $("#tableHint").textContent =
     type === "PYTANIE" ? "ODPOWIEDZ SZCZERZE" : "WYKONAJ WYZWANIE";
   $("#decisionArea").innerHTML =
@@ -275,6 +278,53 @@ function shuffleCards(items) {
     ];
   }
   return shuffled;
+}
+function buildLocalDeck() {
+  const specialCards = shuffleCards(NEVER_CARDS).slice(0, GAME_MOODS[selectedMoodId].neverCards);
+  return shuffleCards([
+    ...CARD_PACKS[selectedDeckId].cards,
+    ...customCards.map((card) => [card.type, card.type === "PYTANIE" ? "♥" : "♣", card.text]),
+    ...specialCards,
+  ]);
+}
+let localNeverAnswers = [];
+function beginLocalNeverRound(statement) {
+  localNeverAnswers = [];
+  $("#tableHint").textContent = "PIJĘ = ROBIŁEM/AM · NIE PIJĘ = NIGDY";
+  renderLocalNeverPrompt(statement);
+}
+function renderLocalNeverPrompt(statement) {
+  const player = players[localNeverAnswers.length];
+  if (!player) return finishLocalNeverRound();
+  $("#currentPlayer").textContent = player.name;
+  $("#turnAvatar").textContent = [...player.name][0].toLocaleUpperCase();
+  $("#turnAvatar").style.background = player.color;
+  $("#decisionArea").innerHTML = `<div class="never-turn"><b>${escapeHtml(player.name)}, czy to o tobie?</b><div class="never-choices"><button class="never-drink" id="neverDrink">🥃 PIJĘ <small>robiłem/am</small></button><button class="never-skip" id="neverSkip">NIE PIJĘ <small>nigdy</small></button></div><small class="never-progress">OSOBA ${localNeverAnswers.length + 1} / ${players.length}</small></div>`;
+  $("#neverDrink").onclick = () => { localNeverAnswers.push(true); renderLocalNeverPrompt(statement); };
+  $("#neverSkip").onclick = () => { localNeverAnswers.push(false); renderLocalNeverPrompt(statement); };
+}
+function finishLocalNeverRound() {
+  const drinkers = localNeverAnswers.filter(Boolean).length;
+  const abstainers = localNeverAnswers.length - drinkers;
+  const sober = $("#soberMode").checked;
+  if (!sober) players.forEach((player, index) => { if (localNeverAnswers[index]) player.shots++; });
+  cardIndex++;
+  $("#scoreList").innerHTML = players.map((player, index) =>
+    `<div class="score-player ${index === turn % players.length ? "current" : ""}"><b>${escapeHtml(player.name)}</b><small>🥃 ${player.shots} SHOTY</small><span class="score-number">${player.points || 0}</span></div>`).join("");
+  $("#resultEyebrow").textContent = "WSPÓLNA TURA · NIGDY PRZENIGDY";
+  $("#resultTitle").textContent = "Nigdy przenigdy!";
+  $("#resultDescription").textContent = sober
+    ? `Piję: ${drinkers} · Nie piję: ${abstainers}. Tryb bezalkoholowy — wybierzcie wodę lub sok.`
+    : `Piję: ${drinkers} · Nie piję: ${abstainers}.${drinkers ? " Osoby, które piły, doliczają po jednym shocie." : " Nikt nie pije — tym razem wszyscy mają czyste konto."}`;
+  $("#resultActions").innerHTML = '<button class="primary-button full" id="nextTurn">DALEJ, NASTĘPNA OSOBA <span>↗</span></button>';
+  $("#resultModal").classList.add("open");
+  $("#nextTurn").onclick = () => {
+    $("#resultModal").classList.remove("open");
+    $("#shotAnimation").classList.remove("is-active");
+    turn++;
+    updateGame();
+  };
+  if (drinkers && !sober) showShotAnimation("Na zdrowie, ekipo!");
 }
 function finishTurn(success) {
   if (!waiting) return;
@@ -465,6 +515,9 @@ function ensureSocket() {
   });
   socket.on("room:state", (r) => {
     onlineRoom = r;
+    selectedMoodId = GAME_MOODS[r.gameMoodId] ? r.gameMoodId : "party";
+    $("#gameMoodSelect").value = selectedMoodId;
+    $("#gameMoodSelect").disabled = true;
     selectedDeckId = CARD_PACKS[r.deckId] ? r.deckId : "classic";
     $("#deckSelect").value = selectedDeckId;
     $("#deckSelect").disabled = true;
@@ -680,9 +733,11 @@ function renderOnlineGame() {
     $("#questionSuit").textContent = r.card[1];
     $("#questionText").textContent = r.card[2];
     card.classList.add("flipped");
+    card.classList.toggle("never-card", r.card[0] === "NIGDY PRZENIGDY");
     flipped = true;
   } else {
     card.classList.remove("flipped");
+    card.classList.remove("never-card");
     flipped = false;
   }
   const amActive = active.id === myPlayerId;
@@ -720,6 +775,21 @@ function renderOnlineGame() {
     const b = $("#drawCard");
     if (b) b.onclick = () => socket.emit("game:draw");
   }
+  if (r.phase === "never" && r.card) {
+    $("#currentPlayer").textContent = "Wszyscy";
+    $("#turnAvatar").textContent = "✋";
+    const answered = r.neverAnswered.includes(myPlayerId);
+    const connectedCount = r.players.filter((player) => player.connected).length;
+    $("#tableHint").textContent = `KAŻDY ODPOWIADA · ${r.neverAnswered.length}/${connectedCount}`;
+    if (answered) {
+      $("#decisionArea").innerHTML = '<div class="vote-wait">ODPOWIEDŹ ZAPISANA · CZEKAMY NA RESZTĘ EKIPY</div>';
+    } else {
+      const soberHint = r.sober ? '<small class="never-sober-note">Tryb bezalkoholowy: odpowiedz bez naliczania shotów.</small>' : "";
+      $("#decisionArea").innerHTML = `<div class="never-turn"><b>Jak odpowiadasz?</b>${soberHint}<div class="never-choices"><button class="never-drink" id="neverDrink">🥃 PIJĘ <small>robiłem/am</small></button><button class="never-skip" id="neverSkip">NIE PIJĘ <small>nigdy</small></button></div></div>`;
+      $("#neverDrink").onclick = () => socket.emit("never:answer", true);
+      $("#neverSkip").onclick = () => socket.emit("never:answer", false);
+    }
+  }
   if (r.phase === "voting") {
     const voted = Object.hasOwn(r.votes, myPlayerId);
     const ys = Object.values(r.votes).filter((v) => v === "yes").length,
@@ -747,6 +817,23 @@ function renderOnlineGame() {
     if (no) no.onclick = () => socket.emit("game:vote", "no");
   }
   if (r.phase === "result") {
+    if (r.lastResult?.never) {
+      const x = r.lastResult, key = `${r.code}:never:${r.cardIndex}`;
+      $("#tableHint").textContent = "TURA NIGDY PRZENIGDY · WYNIK";
+      if (key !== lastResultKey) {
+        lastResultKey = key;
+        $("#resultEyebrow").textContent = "WSPÓLNA TURA · NIGDY PRZENIGDY";
+        $("#resultTitle").textContent = "Nigdy przenigdy!";
+        $("#resultDescription").textContent = x.sober
+          ? `Piję: ${x.yes} · Nie piję: ${x.no}. Tryb bezalkoholowy — wybierzcie wodę lub sok.`
+          : `Piję: ${x.yes} · Nie piję: ${x.no}.${x.yes ? " Każda osoba, która piła, dostaje jednego shota." : " Nikt nie pije — tym razem wszyscy mają czyste konto."}`;
+        $("#resultActions").innerHTML = isHost ? '<button class="primary-button full" id="onlineNext">NASTĘPNA TURA <span>↗</span></button>' : '<div class="vote-wait">HOST PRZECHODZI DO NASTĘPNEJ TURY</div>';
+        $("#resultModal").classList.add("open");
+        if (x.yes && !x.sober) showShotAnimation("Na zdrowie, ekipo!");
+        const n = $("#onlineNext"); if (n) n.onclick = () => socket.emit("game:next");
+      } else if (!$("#resultModal").classList.contains("open")) $("#resultModal").classList.add("open");
+      return;
+    }
     if (r.lastResult?.challenge) {
       const x = r.lastResult, key = `${r.code}:challenge:${r.cardIndex}`;
       $("#tableHint").textContent = "WYNIK POJEDYNKU";
@@ -822,6 +909,7 @@ document.querySelectorAll(".mode-tab").forEach(
       $("#onlineControls").hidden = !online;
       $("#localOptions").hidden = online;
       $("#deckSelect").disabled = false;
+      $("#gameMoodSelect").disabled = false;
       $("#adultConsentRow").hidden = !CARD_PACKS[selectedDeckId].adult;
       $("#customDeckPanel").hidden = online;
       $("#addPlayerRow").hidden = online;
@@ -838,6 +926,7 @@ document.querySelectorAll(".mode-tab").forEach(
       else {
         onlineRoom = null;
         $("#deckSelect").disabled = false;
+        $("#gameMoodSelect").disabled = false;
         renderPlayers();
       }
     }),
@@ -850,6 +939,7 @@ function createRoom() {
       name: $("#onlineName").value.trim(),
       sober: $("#soberMode").checked,
       deckId: selectedDeckId,
+      gameMoodId: selectedMoodId,
       adultConsent: $("#adultConsent").checked,
     });
   }
@@ -885,6 +975,7 @@ $("#deckSelect").addEventListener("change", (event) => {
   $("#adultConsent").checked = false;
   renderPlayers();
 });
+$("#gameMoodSelect").addEventListener("change", updateGameMood);
 $("#adultConsent").addEventListener("change", renderPlayers);
 $("#copyRoomCode").onclick = copyRoomCode;
 $("#copyGameRoomCode").onclick = copyRoomCode;
